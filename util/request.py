@@ -22,15 +22,21 @@ class Request:
                 key = i[0].decode('utf-8')
                 val = i[1].decode('utf-8')
                 self.headers[key] = val
-
         self.cookies = {}
+        if self.headers.__contains__("Cookie"):
+            cookies = self.headers["Cookie"]
+            cookies = cookies.split("; ")
+            for i in cookies:
+                e = i.split("=")
+                self.cookies[e[0]] = e[1]
 
 
 def test1():
-    request = Request(b'GET / HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\n\r\nhello there')
+    request = Request(b'GET / HTTP/1.1\r\nHost: localhost:8080\r\nConnection: keep-alive\r\nCookie: id=X6kAwpgW29M; visits=4\r\n\r\nhello there')
     assert request.method == "GET"
     assert "Host" in request.headers
     assert request.headers["Host"] == "localhost:8080"  # note: The leading space in the header value must be removed
+    print(request.cookies)
     assert request.body == b"hello there"  # There is no body for this request.
     # When parsing POST requests, the body must be in bytes, not str
 
