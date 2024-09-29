@@ -1,7 +1,7 @@
 import socketserver
 from util.request import Request
 from util.router import Router
-from util.hello_path import hello_path, home_path
+from util.hello_path import hello_path, home_path, support_path
 
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
@@ -11,7 +11,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("GET", "/hello", hello_path, True)
         # TODO: Add your routes here
         self.router.add_route("GET", "/", home_path, True)
-        self.router.add_route("GET", "/public/", home_path)
+        self.router.add_route("GET", "/public/index.html", home_path, True)
+        self.router.add_route("GET", "/public/", support_path)
         super().__init__(request, client_address, server)
 
     def handle(self):

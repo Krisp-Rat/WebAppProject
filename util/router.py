@@ -1,6 +1,3 @@
-from util.request import Request
-
-
 class Router:
 
     def __init__(self):
@@ -12,7 +9,8 @@ class Router:
     def route_request(self, request, handler):
         for route in self.routes:
             # exact path handling
-            path = request.path == route[1] if route[3] else route[1] in request.path
+            short_path = request.path[:len(route[1])]
+            path = request.path == route[1] if route[3] else short_path == route[1]
             if route[0] == request.method and path:
                 action = route[2]
                 action(request, handler)
