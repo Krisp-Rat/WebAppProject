@@ -112,8 +112,18 @@ function chatMessageHTML(messageJSON) {
     const username = messageJSON.username;
     const message = messageJSON.message;
     const messageId = messageJSON.id;
+    const uid = messageJSON.uid
+    const cookie = document.cookie
+    var mark1 = ""
+    var mark2 = ""
+    if (cookie.includes(uid)){
+        mark1 = "<mark>"
+        mark2 = "</mark>"
+    }
+
     let messageHTML = "<div id='message_" + messageId + "'><button onclick='deleteMessage(\"" + messageId + "\")'>X</button> ";
-    messageHTML += "<b>" + username + "</b>: " + message + "</div>";
+    messageHTML += "<b>" + username + "</b>: " + mark1 + message + mark2 + "</div>";
+
     return messageHTML;
 }
 
