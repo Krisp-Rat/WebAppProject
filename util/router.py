@@ -15,6 +15,10 @@ class Router:
                 action = route[2]
                 action(request, handler)
                 return
-        handler.request.sendall("HTTP/1.1 404".encode())
+        error = "content was not found".encode()
+        length = len(error)
+        response = f"HTTP/1.1 404 Not Found\r\nContent-Length: {length}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+        response = response.encode() + error
+        handler.request.sendall(response)
 
 

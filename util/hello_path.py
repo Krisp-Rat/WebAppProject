@@ -32,7 +32,11 @@ def home_path(request, handler):
         response = response.encode() + page
         handler.request.sendall(response)
     else:
-        handler.request.sendall("HTTP/1.1 404".encode())
+        error = "content was not found".encode()
+        length = len(error)
+        response = f"HTTP/1.1 404 Not Found\r\nContent-Length: {length}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+        response = response.encode() + error
+        handler.request.sendall(response)
 
 
 def support_path(request, handler):
@@ -50,7 +54,10 @@ def support_path(request, handler):
         response = response.encode() + img
         handler.request.sendall(response)
     else:
-        response = "HTTP/1.1 404".encode()
+        error = "content was not found".encode()
+        length = len(error)
+        response = f"HTTP/1.1 404 Not Found\r\nContent-Length: {length}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
+        response = response.encode() + error
 
     handler.request.sendall(response)
 
