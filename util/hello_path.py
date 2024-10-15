@@ -4,8 +4,16 @@ import uuid
 import html
 from pymongo import MongoClient
 
+docker_db = os.environ.get("DOCKER_DB", "false")
+
+if docker_db == "true":
+    print("Using docker database")
+    mongo_client = MongoClient("mongo")
+else:
+    print("Using local database")
+    mongo_client = MongoClient("localhost")
 # This path is provided as an example of how to use the router
-mongo_client = MongoClient("mongo", 27017)
+
 db = mongo_client["cse312"]
 collection = db["chat"]
 
@@ -28,7 +36,7 @@ def home_path(request, handler):
         length = len(page)
         id = request.cookies.get("uid", uuid.uuid1().int)
 
-        response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nSet-Cookie: visits={visit}; Max-Age=3600\r\nSet-Cookie: uid={id}; Max-Age=86400\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+        response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nSet-Cookie: visits={visit}; Max-Age=3600\r\nSet-Cookie: uid={id}; Max-Age=2592000\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
         response = response.encode() + page
         handler.request.sendall(response)
     else:
