@@ -2,6 +2,7 @@ import os
 import json
 import uuid
 import html
+from auth import extract_credentials, validate_password
 from pymongo import MongoClient
 
 docker_db = os.environ.get("DOCKER_DB", "false")
@@ -78,6 +79,7 @@ def chat_path(request, handler):
         uid = request.cookies.get("uid", "")
         mid = uuid.uuid1().int
         check = body.get("message", 0)
+        # Fix username
         if check != 0:
             message = body["message"]
             # escaping html for security
@@ -109,3 +111,30 @@ def delete_path(request, handler):
     collection.delete_one({"id": f"{mid}"})
 
     handler.request.sendall("HTTP/1.1 204".encode())
+
+
+def login(request, handler):
+    pass
+
+
+def register(request, handler):
+    usr, passwd = extract_credentials(request)
+    valid = validate_password(passwd)
+
+    # Register username and passwd
+    if valid:
+        salt = 0
+        collection.insert_one({"username": usr, "password": f"{passwd}"})
+        body = ""
+    else:
+        body = ""
+        pass
+    body = body.encode()
+    length = len(body)
+    response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+    response = response.encode() + body
+    handler.request.sendall(response)
+
+
+def logout(request, handler):
+    pass

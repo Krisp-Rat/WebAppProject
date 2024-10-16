@@ -1,7 +1,8 @@
 import socketserver
 from util.request import Request
 from util.router import Router
-from util.hello_path import hello_path, home_path, support_path, chat_path, delete_path
+from util.hello_path import hello_path, home_path, support_path, chat_path, delete_path, \
+    login, register, logout
 
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
@@ -18,6 +19,13 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("POST", "/chat-messages", chat_path, True)
         self.router.add_route("GET", "/chat-messages", chat_path, True)
         self.router.add_route("DELETE", "/chat-messages/", delete_path)
+
+        # account routing
+        self.router.add_route("POST", "/login", login,True)
+        self.router.add_route("POST", "/register", register, True)
+        self.router.add_route("POST", "/logout", logout, True)
+
+
         super().__init__(request, client_address, server)
 
     def handle(self):
