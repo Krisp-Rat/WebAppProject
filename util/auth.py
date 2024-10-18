@@ -13,16 +13,20 @@ def extract_credentials(request):
 def validate_password(passwd):
     # Password must be at least 8 chars long
     if len(passwd) < 8:
+        print("-----Password Failed----- \n --too short--")
         return False
     # Must have one lowercase and one uppercase
     all_caps = passwd.upper()
     all_lowers = passwd.lower()
     if passwd == all_caps or passwd == all_lowers:
+        print("-----Password Failed----- \n --Casing issue--")
         return False
 
     # Password must contain at least one char
     if not valid_chars(passwd):
+        print("-----Password Failed----- \n --Missing Chars--")
         return False
+    print("-----Password Validated-----")
     return True
 
 

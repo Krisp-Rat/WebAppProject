@@ -2,7 +2,8 @@ import os
 import json
 import uuid
 import html
-from auth import extract_credentials, validate_password
+import bcrypt
+from util.auth import extract_credentials, validate_password
 from pymongo import MongoClient
 
 docker_db = os.environ.get("DOCKER_DB", "false")
@@ -17,6 +18,8 @@ else:
 
 db = mongo_client["cse312"]
 collection = db["chat"]
+user_info = db["users"]
+auth_tokens = db["auth_tokens"]
 
 
 def hello_path(request, handler):
@@ -35,9 +38,10 @@ def home_path(request, handler):
         page = page.replace("{{visits}}", str(visit), 1)
         page = page.encode()
         length = len(page)
-        id = request.cookies.get("uid", uuid.uuid1().int)
-
-        response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nSet-Cookie: visits={visit}; Max-Age=3600\r\nSet-Cookie: uid={id}; Max-Age=2592000\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+        # probably need to change uid here
+        auth = request.cookies.get("auth", "")
+        truth, usr, uid = authenticate(auth)
+        response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nSet-Cookie: visits={visit}; Max-Age=3600\r\nSet-Cookie: auth={auth}; Max-Age=2592000; HttpOnly\r\nSet-Cookie: uid={uid}; Max-Age=2592000\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
         response = response.encode() + page
         handler.request.sendall(response)
     else:
@@ -73,29 +77,31 @@ def support_path(request, handler):
 
 def chat_path(request, handler):
     response = f"HTTP/1.1 404 OK".encode()
+    # Get the usr and auth
+    cookies = request.cookies
+    auth_token = cookies.get("auth", "")
+    truth, usr, uid = authenticate(auth_token)
     if request.method == "POST":
         body = request.body.decode('utf-8')
         body = json.loads(body)
-        uid = request.cookies.get("uid", "")
         mid = uuid.uuid1().int
         check = body.get("message", 0)
-        # Fix username
         if check != 0:
             message = body["message"]
             # escaping html for security
             message = html.escape(message)
-            collection.insert_one({"username": "Guest", "message": f"{message}", "uid": f"{uid}", "id": f"{mid}"})
+            if message != "":
+                collection.insert_one({"username": f"{usr}", "message": f"{message}", "id": f"{mid}", "uid": f"{uid}"})
         response = f"HTTP/1.1 200 OK".encode()
     elif request.method == "GET":
         ret = []
         messages = collection.find()
         for i in messages:
-            message = i.get("message", "")
-            if message != "":
-                username = i.get("username", "")
-                uid = i.get("uid", "")
-                id = i.get("id", "")
-                ret.append({"message": message, "username": username, "id": f"{id}", "uid": f"{uid}"})
+            message = i.get("message")
+            username = i.get("username")
+            uid = i.get("uid")
+            m_id = i.get("id")
+            ret.append({"message": message, "username": username, "id": f"{m_id}", "uid": f"{uid}"})
 
         body = json.dumps(ret).encode()
         length = len(body)
@@ -104,37 +110,89 @@ def chat_path(request, handler):
     handler.request.sendall(response)
 
 
+def authenticate(token):
+    usr = "Guest"
+    uid = uuid.uuid1().int
+    users = auth_tokens.find()
+    token = token.encode()
+    for user in users:
+        auth_token = user.get("token", "").encode()
+        auth = bcrypt.checkpw(token, auth_token)
+        if auth:
+            uid = user.get("uid")
+            usr = user.get("username")
+            print("\nauthorized: ", usr)
+            return auth, usr, uid
+    print("---Guest not authorized---")
+    return False, usr, uid
+
+
 def delete_path(request, handler):
+    # Add confirmation here
     mid = request.path[15:]
+    cookies = request.cookies
+    auth_token = cookies.get("auth", "")
+    auth, usr, uid = authenticate(auth_token)
 
-    print("Message ID", mid)
-    collection.delete_one({"id": f"{mid}"})
-
-    handler.request.sendall("HTTP/1.1 204".encode())
+    if auth:
+        msg = collection.find_one({"id": mid})
+        print("user", msg.get("username"), "deletes:", msg.get("message"))
+        collection.delete_one({"id": f"{mid}"})
+        set_resp = "204"
+    else:
+        set_resp = "403"
+    handler.request.sendall(f"HTTP/1.1 {set_resp}".encode())
 
 
 def login(request, handler):
-    pass
+    usr, passwd = extract_credentials(request)
+    match = False
+    if validate_password(passwd):
+        user = user_info.find_one({"username": usr})
+        #print("user", user.get("username", "nothing"))
+        passwd_db = user.get("password", "").encode()
+        passwd_bin = passwd.encode()
+        match = bcrypt.checkpw(passwd_bin, passwd_db)
+    set_token = ""
+    if match:
+        auth = str(uuid.uuid1().int)
+        auth_hs = bcrypt.hashpw(auth.encode(), bcrypt.gensalt()).decode('utf-8')
+        user = user_info.find_one({"username": usr})
+        uid = user.get("uid")
+        auth_tokens.insert_one({"username": usr, "token": f"{auth_hs}", "uid": uid})
+        print("auth token", auth)
+        set_token = f"\r\nSet-Cookie: auth={auth}; Max-Age=3600; HttpOnly"
+        print("\n---Logged in successfully---\n")
+
+    response = f"HTTP/1.1 302 Found\r\nLocation: /{set_token}".encode()
+    handler.request.sendall(response)
 
 
 def register(request, handler):
     usr, passwd = extract_credentials(request)
-    valid = validate_password(passwd)
-
+    dupe = user_info.find()
+    duped = True
+    for i in dupe:
+        if i.get("username") == usr:
+            print(f"-----Found duplicate username: {usr}-----")
+            duped = False
     # Register username and passwd
-    if valid:
-        salt = 0
-        collection.insert_one({"username": usr, "password": f"{passwd}"})
-        body = ""
-    else:
-        body = ""
-        pass
-    body = body.encode()
-    length = len(body)
-    response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
-    response = response.encode() + body
+    if validate_password(passwd) and duped:
+        salt = bcrypt.gensalt()
+        hash = bcrypt.hashpw(passwd.encode('utf-8'), salt).decode('utf-8')
+        uid = uuid.uuid1().int
+        user_info.insert_one({"username": usr, "password": f"{hash}", "uid": f"{uid}"})
+
+    response = f"HTTP/1.1 302 Found\r\nLocation: /".encode()
     handler.request.sendall(response)
 
 
 def logout(request, handler):
-    pass
+    cookies = request.cookies
+    auth = cookies.get("auth")
+    usr, uid = auth.split(auth)
+    auth_tokens.delete_one({"username": usr})
+
+    set_resp = f"\r\nSet-Cookie: auth={auth}; Max-Age=3600"
+    response = f"HTTP/1.1 302 Found\r\nLocation: /{set_resp}".encode()
+    handler.request.sendall(response)
