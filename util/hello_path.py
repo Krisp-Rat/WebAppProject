@@ -39,7 +39,7 @@ def home_path(request, handler):
         page = page.encode()
         length = len(page)
         # probably need to change uid here
-        auth = request.cookies.get("auth", "")
+        auth = request.cookies.get("auth", str(uuid.uuid1().int))
         truth, usr, uid = authenticate(auth)
         response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nSet-Cookie: visits={visit}; Max-Age=3600\r\nSet-Cookie: auth={auth}; Max-Age=2592000; HttpOnly\r\nSet-Cookie: uid={uid}; Max-Age=2592000\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
         response = response.encode() + page
@@ -123,6 +123,9 @@ def authenticate(token):
             usr = user.get("username")
             print("\nauthorized: ", usr)
             return auth, usr, uid
+    auth_hs = bcrypt.hashpw(token, bcrypt.gensalt()).decode('utf-8')
+
+    auth_tokens.insert_one({"username": usr, "token": f"{auth_hs}", "uid": f"{uid}"})
     print("---Guest not authorized---")
     return False, usr, uid
 
@@ -133,14 +136,16 @@ def delete_path(request, handler):
     cookies = request.cookies
     auth_token = cookies.get("auth", "")
     auth, usr, uid = authenticate(auth_token)
-
+    set_resp = "403"
     if auth:
         msg = collection.find_one({"id": mid})
-        print("user", msg.get("username"), "deletes:", msg.get("message"))
-        collection.delete_one({"id": f"{mid}"})
-        set_resp = "204"
-    else:
-        set_resp = "403"
+        if usr == msg.get("username"):
+            print("user", msg.get("username"), "deletes:", msg.get("message"))
+            collection.delete_one({"id": f"{mid}"})
+            set_resp = "204"
+
+
+
     handler.request.sendall(f"HTTP/1.1 {set_resp}".encode())
 
 
@@ -149,7 +154,6 @@ def login(request, handler):
     match = False
     if validate_password(passwd):
         user = user_info.find_one({"username": usr})
-        #print("user", user.get("username", "nothing"))
         passwd_db = user.get("password", "").encode()
         passwd_bin = passwd.encode()
         match = bcrypt.checkpw(passwd_bin, passwd_db)
@@ -159,8 +163,11 @@ def login(request, handler):
         auth_hs = bcrypt.hashpw(auth.encode(), bcrypt.gensalt()).decode('utf-8')
         user = user_info.find_one({"username": usr})
         uid = user.get("uid")
+        # Get rid of duplicates
+        dupes = auth_tokens.find({"uid": uid})
+        for d in dupes:
+            auth_tokens.delete_one(d)
         auth_tokens.insert_one({"username": usr, "token": f"{auth_hs}", "uid": uid})
-        print("auth token", auth)
         set_token = f"\r\nSet-Cookie: auth={auth}; Max-Age=3600; HttpOnly"
         print("\n---Logged in successfully---\n")
 
@@ -189,10 +196,11 @@ def register(request, handler):
 
 def logout(request, handler):
     cookies = request.cookies
-    auth = cookies.get("auth")
-    usr, uid = auth.split(auth)
-    auth_tokens.delete_one({"username": usr})
-
-    set_resp = f"\r\nSet-Cookie: auth={auth}; Max-Age=3600"
+    auth = cookies.get("auth", "")
+    auth, usr, uid = authenticate(auth)
+    set_resp = ""
+    if auth:
+        auth_tokens.delete_one({"username": usr})
+        set_resp = f"\r\nSet-Cookie: auth={auth}; Max-Age=3600"
     response = f"HTTP/1.1 302 Found\r\nLocation: /{set_resp}".encode()
     handler.request.sendall(response)
