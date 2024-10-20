@@ -30,21 +30,26 @@ def hello_path(request, handler):
 def home_path(request, handler):
     path = "public/index.html"
     if os.path.exists(path):
+        # Get visit count or initialize to 0, then increment. Grab auth token or initialize
         visit = request.cookies.get("visits", "0")
         visit = int(visit) + 1
-
+        auth = request.cookies.get("auth", str(uuid.uuid1().int))
         with open(path, 'r') as home:
             page = home.read()
+        # Replace visit count and set the xsrf token
         page = page.replace("{{visits}}", str(visit), 1)
+        truth, usr, uid, xsrf = authenticate(auth)
+        print("XSRF token was: ", xsrf)
+        page = page.replace("{{xsrf_token}}", xsrf)
+        # Convert to bytes and set the content length
         page = page.encode()
         length = len(page)
-        # probably need to change uid here
-        auth = request.cookies.get("auth", str(uuid.uuid1().int))
-        truth, usr, uid = authenticate(auth)
+        # Set Content Length, visit count, auth token, uuid. Send to the server.
         response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nSet-Cookie: visits={visit}; Max-Age=3600\r\nSet-Cookie: auth={auth}; Max-Age=2592000; HttpOnly\r\nSet-Cookie: uid={uid}; Max-Age=2592000\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
         response = response.encode() + page
         handler.request.sendall(response)
     else:
+        # If not found sent 404 error
         error = "content was not found".encode()
         length = len(error)
         response = f"HTTP/1.1 404 Not Found\r\nContent-Length: {length}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
@@ -53,20 +58,24 @@ def home_path(request, handler):
 
 
 def support_path(request, handler):
+    # Route all files in /public folder.
     path = request.path[1:]
     if os.path.exists(path):
         with open(path, 'rb') as image:
             img = image.read()
+        # Determine mime type
         mime = path.split(".")[-1]
         mime = mime if mime != "js" else "javascript"
         mime = mime if mime != "ico" else "x-icon"
         m_type = "image" if mime == "jpg" or mime == "x-icon" else "text"
 
+        # Set content length and mime type and send response
         length = len(img)
         response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nX-Content-Type-Options: nosniff\r\nContent-Type: {m_type}/{mime}; charset=utf-8\r\n\r\n"
         response = response.encode() + img
         handler.request.sendall(response)
     else:
+        # If not found send a 404 response
         error = "content was not found".encode()
         length = len(error)
         response = f"HTTP/1.1 404 Not Found\r\nContent-Length: {length}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n"
@@ -80,29 +89,40 @@ def chat_path(request, handler):
     # Get the usr and auth
     cookies = request.cookies
     auth_token = cookies.get("auth", "")
-    truth, usr, uid = authenticate(auth_token)
     if request.method == "POST":
+        # Grab and decode message info from the request.
         body = request.body.decode('utf-8')
         body = json.loads(body)
+        # Generate unique message ID, check for a message header
         mid = uuid.uuid1().int
         check = body.get("message", 0)
         if check != 0:
+            # Grab content from message
             message = body["message"]
+            xsrf_token = body["xsrf_token"]
             # escaping html for security
             message = html.escape(message)
-            if message != "":
+            truth, usr, uid, xsrf = authenticate(auth_token, xsrf_token)
+            print("XSRF token was: ", xsrf)
+            if message != "" and xsrf:
+                # Add username, uuid, message id, and message, to the MongoDB
                 collection.insert_one({"username": f"{usr}", "message": f"{message}", "id": f"{mid}", "uid": f"{uid}"})
+            else:
+                # If the message isnt valid send a 403 response code
+                handler.request.sendall(f"HTTP/1.1 403".encode())
+        # Send 202 response message
         response = f"HTTP/1.1 200 OK".encode()
     elif request.method == "GET":
         ret = []
         messages = collection.find()
+        # Add each message to the return list with message content, username, uuid and message id
         for i in messages:
             message = i.get("message")
             username = i.get("username")
             uid = i.get("uid")
             m_id = i.get("id")
             ret.append({"message": message, "username": username, "id": f"{m_id}", "uid": f"{uid}"})
-
+        # Convert list to JSON, and send response
         body = json.dumps(ret).encode()
         length = len(body)
         response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
@@ -110,24 +130,30 @@ def chat_path(request, handler):
     handler.request.sendall(response)
 
 
-def authenticate(token):
+def authenticate(token, xsrf=None):
+    # Set default values for a guest
     usr = "Guest"
     uid = uuid.uuid1().int
     users = auth_tokens.find()
     token = token.encode()
+    XS = str(uuid.uuid1())
     for user in users:
+        # loop through authenticated users and check the hash of their passwd
         auth_token = user.get("token", "").encode()
         auth = bcrypt.checkpw(token, auth_token)
         if auth:
+            # Grab uuid, username from the authenticated user
             uid = user.get("uid")
             usr = user.get("username")
+            # If xsrf is set to None, return the token found, else evaluate the correctness of the provided token
+            XS = user.get("xsrf") if xsrf == None else xsrf == user.get("xsrf")
             print("\nauthorized: ", usr)
-            return auth, usr, uid
+            return auth, usr, uid, XS
     auth_hs = bcrypt.hashpw(token, bcrypt.gensalt()).decode('utf-8')
 
-    auth_tokens.insert_one({"username": usr, "token": f"{auth_hs}", "uid": f"{uid}"})
+    auth_tokens.insert_one({"username": usr, "token": f"{auth_hs}", "uid": f"{uid}", "xsrf": f"{XS}"})
     print("---Guest not authorized---")
-    return False, usr, uid
+    return False, usr, uid, XS
 
 
 def delete_path(request, handler):
@@ -135,7 +161,7 @@ def delete_path(request, handler):
     mid = request.path[15:]
     cookies = request.cookies
     auth_token = cookies.get("auth", "")
-    auth, usr, uid = authenticate(auth_token)
+    auth, usr, uid, xsrf = authenticate(auth_token)
     set_resp = "403"
     if auth:
         msg = collection.find_one({"id": mid})
@@ -143,8 +169,6 @@ def delete_path(request, handler):
             print("user", msg.get("username"), "deletes:", msg.get("message"))
             collection.delete_one({"id": f"{mid}"})
             set_resp = "204"
-
-
 
     handler.request.sendall(f"HTTP/1.1 {set_resp}".encode())
 
@@ -165,9 +189,10 @@ def login(request, handler):
         uid = user.get("uid")
         # Get rid of duplicates
         dupes = auth_tokens.find({"uid": uid})
+        xsrf = uuid.uuid1()
         for d in dupes:
             auth_tokens.delete_one(d)
-        auth_tokens.insert_one({"username": usr, "token": f"{auth_hs}", "uid": uid})
+        auth_tokens.insert_one({"username": usr, "token": f"{auth_hs}", "uid": uid, "xsrf": f"{xsrf}"})
         set_token = f"\r\nSet-Cookie: auth={auth}; Max-Age=3600; HttpOnly"
         print("\n---Logged in successfully---\n")
 

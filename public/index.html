@@ -36,6 +36,7 @@
             <label>
                 Chat:
                 <input id="chat-text-box" type="text">
+                <input id="xsrf" value="{{xsrf_token}}" name="xsrf_token" hidden>
             </label>
             <button id="chat-button" onclick="sendChat()">Send</button>
         </div>
