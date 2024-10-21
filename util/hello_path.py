@@ -39,7 +39,6 @@ def home_path(request, handler):
         # Replace visit count and set the xsrf token
         page = page.replace("{{visits}}", str(visit), 1)
         truth, usr, uid, xsrf = authenticate(auth)
-        print("XSRF token was: ", xsrf)
         page = page.replace("{{xsrf_token}}", xsrf)
         # Convert to bytes and set the content length
         page = page.encode()
@@ -103,13 +102,12 @@ def chat_path(request, handler):
             # escaping html for security
             message = html.escape(message)
             truth, usr, uid, xsrf = authenticate(auth_token, xsrf_token)
-            print("XSRF token was: ", xsrf)
             if message != "" and xsrf:
                 # Add username, uuid, message id, and message, to the MongoDB
                 collection.insert_one({"username": f"{usr}", "message": f"{message}", "id": f"{mid}", "uid": f"{uid}"})
             else:
                 # If the message isnt valid send a 403 response code
-                handler.request.sendall(f"HTTP/1.1 403".encode())
+                handler.request.sendall(f"HTTP/1.1 403 submission was rejected".encode())
         # Send 202 response message
         response = f"HTTP/1.1 200 OK".encode()
     elif request.method == "GET":
@@ -145,8 +143,13 @@ def authenticate(token, xsrf=None):
             # Grab uuid, username from the authenticated user
             uid = user.get("uid")
             usr = user.get("username")
-            # If xsrf is set to None, return the token found, else evaluate the correctness of the provided token
-            XS = user.get("xsrf") if xsrf == None else xsrf == user.get("xsrf")
+            # If xsrf is set to None, return a new token
+            if xsrf is None:
+                print("was:", user.get("xsrf"), "is now:", XS)
+                auth_tokens.update_one({"uid": uid}, {"$set": {"xsrf": XS}})
+            # Evaluate the token
+            else:
+                XS = xsrf == user.get("xsrf")
             print("\nauthorized: ", usr)
             return auth, usr, uid, XS
     auth_hs = bcrypt.hashpw(token, bcrypt.gensalt()).decode('utf-8')

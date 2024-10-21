@@ -30,7 +30,6 @@ function sendChat() {
     const message = chatTextBox.value;
     const xsrf_token = xsrf.value;
     chatTextBox.value = "";
-    xsrf.value = "";
     if (ws) {
         // Using WebSockets
         socket.send(JSON.stringify({'messageType': 'chatMessage', 'message': message}));
