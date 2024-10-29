@@ -2,7 +2,7 @@ import socketserver
 from util.request import Request
 from util.router import Router
 from util.hello_path import hello_path, home_path, support_path, chat_path, delete_path, \
-    login, register, logout
+    login, register, logout, spotify, send_token_request
 
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
@@ -21,10 +21,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("DELETE", "/chat-messages/", delete_path)
 
         # account routing
-        self.router.add_route("POST", "/login", login,True)
+        self.router.add_route("POST", "/login", login, True)
         self.router.add_route("POST", "/register", register, True)
         self.router.add_route("POST", "/logout", logout, True)
-
+        self.router.add_route("GET", "/spotify-login?", send_token_request, True)
+        self.router.add_route("POST", "/login/password", spotify, True)
 
         super().__init__(request, client_address, server)
 

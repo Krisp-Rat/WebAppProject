@@ -3,10 +3,14 @@ import json
 import uuid
 import html
 import bcrypt
-from util.auth import extract_credentials, validate_password
+import base64
+from requests import post
+from util.auth import extract_credentials, validate_password, percent_characters
 from pymongo import MongoClient
 
 docker_db = os.environ.get("DOCKER_DB", "false")
+client = os.environ.get("CLIENT", "0ad0d9e4e00f48e8a05aa8e7829dd94c")
+secret = os.environ.get("SECRET", "1f42a779f31c443697dcae9489d52cfe")
 
 if docker_db == "true":
     print("Using docker database")
@@ -14,9 +18,10 @@ if docker_db == "true":
 else:
     print("Using local database")
     mongo_client = MongoClient("localhost")
-# This path is provided as an example of how to use the router
 
+# This path is provided as an example of how to use the router
 db = mongo_client["cse312"]
+
 collection = db["chat"]
 user_info = db["users"]
 auth_tokens = db["auth_tokens"]
@@ -225,10 +230,25 @@ def register(request, handler):
 def logout(request, handler):
     cookies = request.cookies
     auth = cookies.get("auth", "")
-    auth, usr, uid = authenticate(auth)
+    auth, usr, uid, xsrf = authenticate(auth)
     set_resp = ""
-    if auth:
+    if auth and xsrf:
         auth_tokens.delete_one({"username": usr})
         set_resp = f"\r\nSet-Cookie: auth={auth}; Max-Age=3600"
     response = f"HTTP/1.1 302 Found\r\nLocation: /{set_resp}".encode()
     handler.request.sendall(response)
+
+
+def send_token_request(request, handler):
+    auth_string = client + ":" + secret
+    auth_bytes = auth_string.encode("utf-8")
+    auth_base64 = (base64.b64encode(auth_bytes)).decode("utf-8")
+    url = "http://accounts.spotify.com/authorize"
+    headers = {"Authorization": "Basic " + auth_base64, "Content-Type": "application/x-www-form-urlencoded"}
+    data = {"grant_type": "authorization_code", "redirect_uri": "http://localhost:8080/spotify"}
+    result = post(url, headers=headers, data=data)
+    length = len(result.content)
+    response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+    response = response.encode() + result.content
+    handler.request.sendall(response)
+
