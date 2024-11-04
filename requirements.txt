@@ -1,2 +1,4 @@
 pymongo
 bcrypt
+pillow
+ffmpeg-python

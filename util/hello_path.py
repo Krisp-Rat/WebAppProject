@@ -3,10 +3,12 @@ import json
 import uuid
 import html
 import bcrypt
-import base64
-from requests import post
-from util.auth import extract_credentials, validate_password, percent_characters
+import ffmpeg
+from PIL import Image, ImageSequence
+from util.auth import extract_credentials, validate_password
+from util.multipart import parse_multipart
 from pymongo import MongoClient
+import io
 
 docker_db = os.environ.get("DOCKER_DB", "false")
 client = os.environ.get("CLIENT", "0ad0d9e4e00f48e8a05aa8e7829dd94c")
@@ -25,6 +27,7 @@ db = mongo_client["cse312"]
 collection = db["chat"]
 user_info = db["users"]
 auth_tokens = db["auth_tokens"]
+uploads = db["uploads"]
 
 
 def hello_path(request, handler):
@@ -63,7 +66,11 @@ def home_path(request, handler):
 
 def support_path(request, handler):
     # Route all files in /public folder.
-    path = request.path[1:]
+    if "/public/image/" in request.path:
+        path = "public/image/" + request.path[len("/public/image/"):].replace("/", "_")
+    else:
+        path = request.path[1:]
+    path = get_file(path)
     if os.path.exists(path):
         with open(path, 'rb') as image:
             img = image.read()
@@ -72,7 +79,7 @@ def support_path(request, handler):
         mime = mime if mime != "js" else "javascript"
         mime = mime if mime != "ico" else "x-icon"
         m_type = "image" if mime == "jpg" or mime == "x-icon" else "text"
-
+        m_type = "video" if mime == "mp4" else m_type
         # Set content length and mime type and send response
         length = len(img)
         response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nX-Content-Type-Options: nosniff\r\nContent-Type: {m_type}/{mime}; charset=utf-8\r\n\r\n"
@@ -239,16 +246,108 @@ def logout(request, handler):
     handler.request.sendall(response)
 
 
-def send_token_request(request, handler):
-    auth_string = client + ":" + secret
-    auth_bytes = auth_string.encode("utf-8")
-    auth_base64 = (base64.b64encode(auth_bytes)).decode("utf-8")
-    url = "http://accounts.spotify.com/authorize"
-    headers = {"Authorization": "Basic " + auth_base64, "Content-Type": "application/x-www-form-urlencoded"}
-    data = {"grant_type": "authorization_code", "redirect_uri": "http://localhost:8080/spotify"}
-    result = post(url, headers=headers, data=data)
-    length = len(result.content)
-    response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
-    response = response.encode() + result.content
+signatures = {"image/jpeg": [b"\xff\xd8\xff\xe0", b"\xff\xd8\xff\xdB", b"\xff\xd8\xff\xee"],
+              "image/png": [b"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a"],
+              "image/gif": [b"\x47\x49\x46\x38\x37\x61", b"\x47\x49\x46\x38\x39\x61"],
+              "video/mp4": [b"\x66\x74\x79\x70\x69\x73\x6f\x6d", b"\x66\x74\x79\x70\x4d\x53\x4e\x56"]}
+
+
+def mime_sniffer(content):
+    for type, signature in signatures.items():
+        for sig in signature:
+            cont = content[:len(sig)]
+            mp_cont = content[4:len(sig) + 4]
+            if cont == sig:
+                return type
+            elif mp_cont == sig:
+                return type
+
+    return "text/plain"
+
+
+def upload(request, handler):
+    multipart = parse_multipart(request)
+    token = request.cookies.get("auth", "")
+    auth, usr, uid, xsrf = authenticate(token)
+    parts = multipart.parts
+    for part in parts:
+        mime = mime_sniffer(part.content)
+        # this line strips the provided file name of spaces and /
+        provided_filename = part.headers.get("Content-Disposition").split("; ")[2].split("=")[1].replace('"',
+                                                                                                         "").replace(
+            "/", "-").replace(" ", "_")
+        extension = mime.split("/")[-1].replace("e", "")
+        filename = get_filename(extension)
+        provided_filename = provided_filename.split(".")[0] + "." + extension
+        if mime == "video/mp4":
+            video_html = f"<video width='100%' controls>  <source src='public/image/{provided_filename}' type='video/mp4'>  </video>"
+            resize_mp4(part.content, filename)
+            collection.insert_one(
+                {"username": f"{usr}", "message": f"{video_html}", "id": f"{uuid.uuid1().int}", "uid": f"{uid}"})
+            uploads.insert_one({"provided": f"public/image/{provided_filename}", "stored": filename})
+        elif mime == "image/gif":
+            # If it is a gif add HTML img element to DB with path reference
+            image_html = f"<div> <img src='public/image/{provided_filename}'> </div>"
+            collection.insert_one(
+                {"username": f"{usr}", "message": f"{image_html}", "id": f"{uuid.uuid1().int}", "uid": f"{uid}"})
+            uploads.insert_one({"provided": f"public/image/{provided_filename}", "stored": filename})
+            img = io.BytesIO(part.content)
+            file = Image.open(img)
+            # resize and save
+            resize_gif(file, filename)
+
+        elif mime == "image/jpeg" or mime == "image/png":
+            # If it is a jpg or png add HTML img element to DB with path reference
+            image_html = f"<div> <img src='public/image/{provided_filename}'> </div>"
+            collection.insert_one(
+                {"username": f"{usr}", "message": f"{image_html}", "id": f"{uuid.uuid1().int}", "uid": f"{uid}"})
+            uploads.insert_one({"provided": f"public/image/{provided_filename}", "stored": filename})
+            img = io.BytesIO(part.content)
+            file = Image.open(img)
+            # resize and save
+            file.thumbnail((240, 240))
+            file.save(filename)
+
+    set_resp = ""
+    response = f"HTTP/1.1 302 Found\r\nLocation: /{set_resp}".encode()
     handler.request.sendall(response)
 
+
+def resize_mp4(file, filename):
+    with open(filename, "wb") as f:
+        f.write(file)
+    f.close()
+
+    # input = ffmpeg.input(filename)
+    # video = input.video.filter('scale', '240:240:force_original_aspect_ratio=decrease')
+    # audio = input.audio
+    # out = ffmpeg.output()
+
+
+def resize_gif(file, filename):
+    images = []
+    for frame in ImageSequence.Iterator(file):
+        frame = frame.copy()
+        frame.thumbnail((240, 240))
+        images.append(frame)
+
+    images[0].save(
+        filename,
+        save_all=True,
+        append_images=images[1:],
+        duration=500,
+        loop=0
+    )
+
+
+def get_filename(extension):
+    filename = str(uuid.uuid1().int)
+    return f"public/image/image{filename}.{extension}"
+
+
+def get_file(filename):
+    files = uploads.find()
+    for file in files:
+        if file.get("provided") == filename:
+            return file.get("stored")
+    return filename

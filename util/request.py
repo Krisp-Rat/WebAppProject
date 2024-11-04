@@ -2,7 +2,7 @@ class Request:
 
     def __init__(self, request: bytes):
         # TODO: parse the bytes of the request and populate the following instance variables
-        body_split = request.split(b'\r\n\r\n')
+        body_split = request.split(b'\r\n\r\n', 1)
         request_split = body_split[0].split(b'\r\n')
         R_line = request_split[0].split(b' ')
         self.body = body_split[1]

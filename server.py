@@ -2,8 +2,8 @@ import socketserver
 from util.request import Request
 from util.router import Router
 from util.hello_path import hello_path, home_path, support_path, chat_path, delete_path, \
-    login, register, logout, spotify, send_token_request
-
+    login, register, logout, upload
+from util.multipart import parse_multipart
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
@@ -24,17 +24,37 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         self.router.add_route("POST", "/login", login, True)
         self.router.add_route("POST", "/register", register, True)
         self.router.add_route("POST", "/logout", logout, True)
-        self.router.add_route("GET", "/spotify-login?", send_token_request, True)
-        self.router.add_route("POST", "/login/password", spotify, True)
 
+        # upload routing
+        self.router.add_route("POST", "/media-uploads", upload, True)
         super().__init__(request, client_address, server)
 
     def handle(self):
-        received_data = self.request.recv(2048)
-        print(self.client_address)
+        rec = self.request.recv(2048)
+        received_data = rec
         print("--- received data ---")
         print(received_data)
         print("--- end of data ---\n\n")
+        request = Request(received_data)
+        # test for headers only
+        if len(received_data) == 0:
+            print("No data received")
+            return
+        if (request.path == "/media-uploads" or request.path == "/register" or request.path == "/login" or request.path == "/logout") and len(request.body) == 0:
+            print("Chrome Multipart")
+            rec = self.request.recv(2048)
+            received_data += rec
+        while len(rec) == 2048:
+            rec = self.request.recv(2048)
+            received_data += rec
+            if len(received_data) == 0:
+                print("No data received")
+                return
+            print("--- received data ---")
+            print(len(received_data))
+            print(received_data)
+            print("--- end of data ---\n\n")
+
         request = Request(received_data)
 
         self.router.route_request(request, self)
