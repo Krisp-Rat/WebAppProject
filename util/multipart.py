@@ -22,6 +22,7 @@ def parse_multipart(request):
     end_boundary = enc_boundary + b"--"
     if content_length != len(request.body):
         print("---Content-Length error---")
+        print("Got: ", len(request.body), "\nExpected: ", content_length)
     data = request.body.split(end_boundary, 1)[0]
     data = b"\r\n" + data
     data = data.split(enc_boundary + b"\r\n")[1:]

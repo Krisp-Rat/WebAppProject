@@ -30,30 +30,20 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         super().__init__(request, client_address, server)
 
     def handle(self):
-        rec = self.request.recv(2048)
-        received_data = rec
+        received_data = self.request.recv(2048)
+        request = Request(received_data)
+        body_len = len(request.body)
+        content_length = int(request.headers.get('Content-Length', str(body_len)))
+
+        while body_len < content_length:
+            additional_data = self.request.recv(2048)
+            received_data += additional_data
+            request = Request(received_data)
+            body_len = len(request.body)
+
         print("--- received data ---")
         print(received_data)
         print("--- end of data ---\n\n")
-        request = Request(received_data)
-        # test for headers only
-        if len(received_data) == 0:
-            print("No data received")
-            return
-        if (request.path == "/media-uploads" or request.path == "/register" or request.path == "/login" or request.path == "/logout") and len(request.body) == 0:
-            print("Chrome Multipart")
-            rec = self.request.recv(2048)
-            received_data += rec
-        while len(rec) == 2048:
-            rec = self.request.recv(2048)
-            received_data += rec
-            if len(received_data) == 0:
-                print("No data received")
-                return
-            print("--- received data ---")
-            print(len(received_data))
-            print(received_data)
-            print("--- end of data ---\n\n")
 
         request = Request(received_data)
 

@@ -7,7 +7,5 @@ services:
     environment:
       WAIT_HOSTS: mongo:27017
       DOCKER_DB: true
-      CLIENT: 0ad0d9e4e00f48e8a05aa8e7829dd94c
-      SECRET: 1f42a779f31c443697dcae9489d52cfe
     ports:
       - '8080:8080'

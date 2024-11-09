@@ -318,11 +318,6 @@ def resize_mp4(file, filename):
         f.write(file)
     f.close()
 
-    # input = ffmpeg.input(filename)
-    # video = input.video.filter('scale', '240:240:force_original_aspect_ratio=decrease')
-    # audio = input.audio
-    # out = ffmpeg.output()
-
 
 def resize_gif(file, filename):
     images = []
