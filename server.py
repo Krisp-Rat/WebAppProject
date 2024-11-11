@@ -2,7 +2,7 @@ import socketserver
 from util.request import Request
 from util.router import Router
 from util.hello_path import hello_path, home_path, support_path, chat_path, delete_path, \
-    login, register, logout, upload
+    login, register, logout, upload, web_socket
 from util.multipart import parse_multipart
 
 class MyTCPHandler(socketserver.BaseRequestHandler):
@@ -27,6 +27,9 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         # upload routing
         self.router.add_route("POST", "/media-uploads", upload, True)
+
+        # Web Socket routing
+        self.router.add_route("GET", "/websocket", web_socket, True)
         super().__init__(request, client_address, server)
 
     def handle(self):
@@ -35,19 +38,22 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         body_len = len(request.body)
         content_length = int(request.headers.get('Content-Length', str(body_len)))
 
+        print("--- received data ---")
+        print(received_data)
+        print("--- end of data ---\n\n")
+
         while body_len < content_length:
             additional_data = self.request.recv(2048)
             received_data += additional_data
             request = Request(received_data)
             body_len = len(request.body)
 
-        print("--- received data ---")
-        print(received_data)
-        print("--- end of data ---\n\n")
-
         request = Request(received_data)
 
         self.router.route_request(request, self)
+        web_socket = True
+        while web_socket:
+            pass
 
 
 def main():
@@ -55,7 +61,7 @@ def main():
     port = 8080
     socketserver.TCPServer.allow_reuse_address = True
 
-    server = socketserver.TCPServer((host, port), MyTCPHandler)
+    server = socketserver.ThreadingTCPServer((host, port), MyTCPHandler)
 
     print("Listening on port " + str(port))
     server.serve_forever()

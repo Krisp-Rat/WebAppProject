@@ -1,4 +1,4 @@
-const ws = false;
+const ws = true;
 let socket = null;
 let chatMessages = {};
 
@@ -32,6 +32,7 @@ function sendChat() {
     chatTextBox.value = "";
     if (ws) {
         // Using WebSockets
+        console.log("Gets here")
         socket.send(JSON.stringify({'messageType': 'chatMessage', 'message': message}));
     } else {
         // Using AJAX

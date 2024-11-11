@@ -3,10 +3,10 @@ import json
 import uuid
 import html
 import bcrypt
-import ffmpeg
 from PIL import Image, ImageSequence
 from util.auth import extract_credentials, validate_password
 from util.multipart import parse_multipart
+from util.websockets import compute_accept, parse_ws_frame, generate_ws_frame
 from pymongo import MongoClient
 import io
 
@@ -346,3 +346,10 @@ def get_file(filename):
         if file.get("provided") == filename:
             return file.get("stored")
     return filename
+
+def web_socket(request, handler):
+    sec_key = request.headers.get("Sec-WebSocket-Key")
+    sec_key = compute_accept(sec_key)
+    response = f"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {sec_key}\r\n".encode()
+    handler.request.sendall(response)
+    print("should have been sent out")
