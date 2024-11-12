@@ -21,8 +21,6 @@ def parse_ws_frame(input_bytes):
     fin_bit = (input_bytes[0] & 128) >> 7
     opcode = input_bytes[0] & 15
     mask_bit = (input_bytes[1] & 128) >> 7
-    print("Mask Bit: ", mask_bit)
-    print("Length Bit: ", input_bytes[1])
     payload_length = input_bytes[1] & 127
     pointer = 2
     if payload_length == 126:
@@ -55,3 +53,12 @@ def generate_ws_frame(input_bytes):
         length_bit = b'\x7F' + payload_length.to_bytes(length=8)
     frame_bytes = b'\x81' + length_bit + input_bytes
     return frame_bytes
+
+
+def read_length(input_bytes):
+    payload_length = input_bytes[1] & 127
+    if payload_length == 126:
+        payload_length = int.from_bytes(input_bytes[2:4])
+    elif payload_length == 127:
+        payload_length = int.from_bytes(input_bytes[2:10])
+    return payload_length
