@@ -351,10 +351,9 @@ def get_file(filename):
 def web_socket(request, handler):
     token = request.cookies.get("auth", "")
     auth, usr, uid, xsrf = authenticate(token)
-    if not auth:
-        return
     sec_key = request.headers.get("Sec-WebSocket-Key")
     sec_key = compute_accept(sec_key)
-    response = f"HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Accept: {sec_key}\r\n".encode()
-    response = generate_ws_frame(response)
+    response = f"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {sec_key}\r\n\r\n".encode()
+    print(response)
     handler.request.sendall(response)
+    print("End")

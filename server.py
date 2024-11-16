@@ -5,7 +5,7 @@ from util.hello_path import hello_path, home_path, support_path, chat_path, dele
     login, register, logout, upload, web_socket
 from util.websockets import parse_ws_frame, read_length
 
-
+user_list = []
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
     def __init__(self, request, client_address, server):
@@ -43,21 +43,25 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
         print(received_data)
         print("--- end of data ---\n\n")
 
-        # while body_len < content_length:
-        #     additional_data = self.request.recv(2048)
-        #     received_data += additional_data
-        #     request = Request(received_data)
-        #     body_len = len(request.body)
-        #
-        # request = Request(received_data)
+        while body_len < content_length:
+            print("grabbing extra data")
+            additional_data = self.request.recv(2048)
+            received_data += additional_data
+            request = Request(received_data)
+            body_len = len(request.body)
 
+        request = Request(received_data)
+        live_connection = True if request.path == "/websocket" else False
+        print(live_connection)
         self.router.route_request(request, self)
-        web_socket = True
-        # while web_socket:
-        #     received_data = self.request.recv(2048)
-        #     print("--- received data ---")
-        #     print(received_data)
-        #     print("--- end of data ---\n\n")
+
+        while live_connection:
+            received_data = self.request.recv(2048)
+            if len(received_data) > 0:
+                print("--- received data ---")
+                print(received_data)
+                frame = parse_ws_frame(received_data)
+                print("--- end of data ---\n\n")
 
 
 def main():
