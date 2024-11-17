@@ -349,11 +349,24 @@ def get_file(filename):
 
 
 def web_socket(request, handler):
-    token = request.cookies.get("auth", "")
-    auth, usr, uid, xsrf = authenticate(token)
     sec_key = request.headers.get("Sec-WebSocket-Key")
     sec_key = compute_accept(sec_key)
     response = f"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {sec_key}\r\n\r\n".encode()
-    print(response)
     handler.request.sendall(response)
-    print("End")
+
+
+def process(payload, usr, uid):
+    request = json.loads(payload.decode("utf-8"))
+    messageType = request.get("messageType", "")
+    # Chat messages
+    ret = b''
+    if messageType == "chatMessage":
+        message = request.get("message")
+        # Sanitize input
+        message = html.escape(message)
+        mid = uuid.uuid1().int
+        collection.insert_one({"username": f"{usr}", "message": f"{message}", "id": f"{mid}", "uid": f"{uid}"})
+        ret = {'messageType': 'chatMessage', 'username': usr, 'message': message, 'id': mid, "uid": uid}
+        ret = json.dumps(ret)
+        ret = generate_ws_frame(ret.encode())
+    return ret

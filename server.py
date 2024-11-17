@@ -2,10 +2,12 @@ import socketserver
 from util.request import Request
 from util.router import Router
 from util.hello_path import hello_path, home_path, support_path, chat_path, delete_path, \
-    login, register, logout, upload, web_socket
+    login, register, logout, upload, web_socket, authenticate, process
 from util.websockets import parse_ws_frame, read_length
 
-user_list = []
+user_list = {}
+
+
 class MyTCPHandler(socketserver.BaseRequestHandler):
 
     def __init__(self, request, client_address, server):
@@ -51,16 +53,44 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             body_len = len(request.body)
 
         request = Request(received_data)
-        live_connection = True if request.path == "/websocket" else False
-        print(live_connection)
         self.router.route_request(request, self)
 
+        # Web socket management
+        live_connection = True if request.path == "/websocket" else False
+        if live_connection:
+            token = request.cookies.get("auth", "")
+            auth, usr, uid, xsrf = authenticate(token)
+            user_list[uid] = self
+            print("Connected for", usr, "started")
+
+        payload = b''
+        received_data = b''
         while live_connection:
-            received_data = self.request.recv(2048)
+            received_data += self.request.recv(2048)
             if len(received_data) > 0:
                 print("--- received data ---")
-                print(received_data)
-                frame = parse_ws_frame(received_data)
+                frame_len = read_length(received_data)
+
+                while frame_len > len(received_data):
+                    received_data += self.request.recv(2048)
+
+                frame = parse_ws_frame(received_data[:frame_len])
+                received_data = received_data[frame_len:]
+                payload += frame.payload
+
+                # Close connection
+                if frame.opcode == 8:
+                    user_list.pop(uid)
+                    print("Connection for", usr, "ended\n\n")
+                    break
+                # Process Text
+                if frame.opcode == 1:
+                    data = process(payload, usr, uid)
+                    print("Sent message from: ", usr)
+                    for uuid, server in user_list.items():
+                        server.request.send(data)
+                    # Reset payload
+                    payload = b''
                 print("--- end of data ---\n\n")
 
 

@@ -3,11 +3,12 @@ import hashlib
 
 
 class Frame:
-    def __init__(self, fin_bit, opcode, payload_length, payload):
+    def __init__(self, fin_bit, opcode, payload_length, payload, total_length):
         self.fin_bit = fin_bit
         self.opcode = opcode
         self.payload_length = payload_length
         self.payload = payload
+        self.total_length = total_length
 
 
 def compute_accept(key):
@@ -39,8 +40,9 @@ def parse_ws_frame(input_bytes):
 
     else:
         payload = input_bytes[pointer: pointer + payload_length]
+        pointer += payload_length
 
-    return Frame(fin_bit, opcode, payload_length, payload)
+    return Frame(fin_bit, opcode, payload_length, payload, pointer)
 
 
 def generate_ws_frame(input_bytes):
@@ -56,9 +58,23 @@ def generate_ws_frame(input_bytes):
 
 
 def read_length(input_bytes):
+    mask_bit = (input_bytes[1] & 128) >> 7
     payload_length = input_bytes[1] & 127
+    header = 2
     if payload_length == 126:
         payload_length = int.from_bytes(input_bytes[2:4])
+        header += 2
     elif payload_length == 127:
         payload_length = int.from_bytes(input_bytes[2:10])
-    return payload_length
+        header += 8
+    if mask_bit == 1:
+        header += 4
+    return payload_length + header
+
+
+def test1():
+    input = b"\x81\xfe\x0c\32\xaa\x1b\xe2\x23\xe1"
+    parsed = read_length(input)
+    print(parsed)
+
+# test1()
