@@ -25,10 +25,10 @@ def parse_ws_frame(input_bytes):
     payload_length = input_bytes[1] & 127
     pointer = 2
     if payload_length == 126:
-        payload_length = int.from_bytes(input_bytes[2:4])
+        payload_length = int.from_bytes(input_bytes[2:4], byteorder='big')
         pointer += 2
     elif payload_length == 127:
-        payload_length = int.from_bytes(input_bytes[2:10])
+        payload_length = int.from_bytes(input_bytes[2:10], byteorder='big')
         pointer += 8
     payload = b''
     if mask_bit == 1:
@@ -62,10 +62,10 @@ def read_length(input_bytes):
     payload_length = input_bytes[1] & 127
     header = 2
     if payload_length == 126:
-        payload_length = int.from_bytes(input_bytes[2:4])
+        payload_length = int.from_bytes(input_bytes[2:4], byteorder='big')
         header += 2
     elif payload_length == 127:
-        payload_length = int.from_bytes(input_bytes[2:10])
+        payload_length = int.from_bytes(input_bytes[2:10], byteorder='big')
         header += 8
     if mask_bit == 1:
         header += 4
