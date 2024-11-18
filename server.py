@@ -65,8 +65,10 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
         payload = b''
         received_data = b''
+        opcode = 0
         while live_connection:
-            received_data += self.request.recv(2048)
+            if len(received_data) == 0:
+                received_data += self.request.recv(2048)
             if len(received_data) > 0:
                 print("--- received data ---")
                 frame_len = read_length(received_data)
@@ -74,17 +76,24 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 while frame_len > len(received_data):
                     received_data += self.request.recv(2048)
 
+                print(len(received_data))
                 frame = parse_ws_frame(received_data[:frame_len])
                 received_data = received_data[frame_len:]
+                print(len(received_data))
                 payload += frame.payload
 
+                opcode = opcode if frame.opcode == 0 else frame.opcode
+                if frame.fin_bit == 0:
+                    print("Continuation frame")
+
                 # Close connection
-                if frame.opcode == 8:
+                if opcode == 8 and frame.fin_bit == 1:
                     user_list.pop(uid)
                     print("Connection for", usr, "ended\n\n")
                     break
+
                 # Process Text
-                if frame.opcode == 1:
+                if opcode == 1 and frame.fin_bit == 1:
                     data = process(payload, usr, uid)
                     print("Sent message from: ", usr)
                     for uuid, server in user_list.items():
