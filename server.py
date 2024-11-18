@@ -79,7 +79,6 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
                 print(len(received_data))
                 frame = parse_ws_frame(received_data[:frame_len])
                 received_data = received_data[frame_len:]
-                print(len(received_data))
                 payload += frame.payload
 
                 opcode = opcode if frame.opcode == 0 else frame.opcode
@@ -94,10 +93,11 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
                 # Process Text
                 if opcode == 1 and frame.fin_bit == 1:
-                    data = process(payload, usr, uid)
+                    data, send_all = process(payload, usr, uid, user_list)
                     print("Sent message from: ", usr)
                     for uuid, server in user_list.items():
-                        server.request.send(data)
+                        if send_all or uuid != uid:
+                            server.request.send(data)
                     # Reset payload
                     payload = b''
                 print("--- end of data ---\n\n")

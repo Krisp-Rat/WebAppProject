@@ -355,11 +355,12 @@ def web_socket(request, handler):
     handler.request.sendall(response)
 
 
-def process(payload, usr, uid):
+def process(payload, usr, uid, user_list):
     request = json.loads(payload.decode("utf-8"))
     messageType = request.get("messageType", "")
     # Chat messages
     ret = b''
+    send_all = False
     if messageType == "chatMessage":
         message = request.get("message")
         # Sanitize input
@@ -367,6 +368,14 @@ def process(payload, usr, uid):
         mid = uuid.uuid1().int
         collection.insert_one({"username": f"{usr}", "message": f"{message}", "id": f"{mid}", "uid": f"{uid}"})
         ret = {'messageType': 'chatMessage', 'username': usr, 'message': message, 'id': mid, "uid": uid}
-        ret = json.dumps(ret)
-        ret = generate_ws_frame(ret.encode())
-    return ret
+        ret = json.dumps(ret).encode()
+        send_all = True
+    if messageType == 'webRTC-offer':
+        ret = payload
+    if messageType == 'webRTC-answer':
+        ret = payload
+    if messageType == 'webRTC-candidate':
+        ret = payload
+
+    ret = generate_ws_frame(ret)
+    return ret, send_all
