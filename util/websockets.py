@@ -36,7 +36,7 @@ def parse_ws_frame(input_bytes):
         pointer += 4
         for i in range(payload_length):
             bites = input_bytes[pointer + i] ^ mask[i % 4]
-            payload += bites.to_bytes(1)
+            payload += bites.to_bytes(1, byteorder='big')
 
     else:
         payload = input_bytes[pointer: pointer + payload_length]
@@ -48,11 +48,11 @@ def parse_ws_frame(input_bytes):
 def generate_ws_frame(input_bytes):
     payload_length = len(input_bytes)
     if payload_length < 126:
-        length_bit = payload_length.to_bytes()
+        length_bit = payload_length.to_bytes(byteorder='big')
     elif payload_length < 65536:
-        length_bit = b'\x7E' + payload_length.to_bytes(length=2)
+        length_bit = b'\x7E' + payload_length.to_bytes(length=2, byteorder='big')
     else:
-        length_bit = b'\x7F' + payload_length.to_bytes(length=8)
+        length_bit = b'\x7F' + payload_length.to_bytes(length=8, byteorder='big')
     frame_bytes = b'\x81' + length_bit + input_bytes
     return frame_bytes
 
