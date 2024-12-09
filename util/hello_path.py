@@ -209,7 +209,7 @@ def login(request, handler):
         set_token = f"\r\nSet-Cookie: auth={auth}; Max-Age=3600; HttpOnly"
         print("\n---Logged in successfully---\n")
 
-    response = f"HTTP/1.1 302 Found\r\nLocation: /{set_token}".encode()
+    response = f"HTTP/1.1 302 Found\r\nLocation: /{set_token}\r\n\r\n".encode()
     handler.request.sendall(response)
 
 
@@ -228,7 +228,7 @@ def register(request, handler):
         uid = uuid.uuid1().int
         user_info.insert_one({"username": usr, "password": f"{hash}", "uid": f"{uid}"})
 
-    response = f"HTTP/1.1 302 Found\r\nLocation: /".encode()
+    response = f"HTTP/1.1 302 Found\r\nLocation: /\r\n\r\n".encode()
     handler.request.sendall(response)
 
 
@@ -307,7 +307,7 @@ def upload(request, handler):
             file.save(filename)
 
     set_resp = ""
-    response = f"HTTP/1.1 302 Found\r\nLocation: /{set_resp}".encode()
+    response = f"HTTP/1.1 302 Found\r\nLocation: /{set_resp}\r\n\r\n".encode()
     handler.request.sendall(response)
 
 
