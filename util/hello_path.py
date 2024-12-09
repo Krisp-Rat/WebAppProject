@@ -11,8 +11,6 @@ from pymongo import MongoClient
 import io
 
 docker_db = os.environ.get("DOCKER_DB", "false")
-client = os.environ.get("CLIENT", "0ad0d9e4e00f48e8a05aa8e7829dd94c")
-secret = os.environ.get("SECRET", "1f42a779f31c443697dcae9489d52cfe")
 
 if docker_db == "true":
     print("Using docker database")
@@ -52,7 +50,7 @@ def home_path(request, handler):
         page = page.encode()
         length = len(page)
         # Set Content Length, visit count, auth token, uuid. Send to the server.
-        response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nSet-Cookie: visits={visit}; Max-Age=3600\r\nSet-Cookie: auth={auth}; Max-Age=2592000; HttpOnly\r\nSet-Cookie: uid={uid}; Max-Age=2592000\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
+        response = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nSet-Cookie: visits={visit}; Max-Age=3600\r\nSet-Cookie: auth={auth}; Max-Age=2592000; Secure=true; HttpOnly\r\nSet-Cookie: uid={uid}; Max-Age=2592000\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
         response = response.encode() + page
         handler.request.sendall(response)
     else:
